@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
+    <meta name="theme-color" content="#05060d" />
+    <meta name="description" content="PRISM — an on-device AI vision studio. Turn any photo into explorable 3D, erase backgrounds, and let AI describe what it sees. Runs entirely in your browser. Zero servers." />
+    <meta property="og:title" content="PRISM — On-device AI vision" />
+    <meta property="og:description" content="Turn any photo into explorable 3D. Erase backgrounds. Let AI see. All on your device, no servers." />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,8 92,84 8,84' fill='none' stroke='%237c5cff' stroke-width='6' stroke-linejoin='round'/></svg>" />
+    <title>PRISM — On-device AI vision</title>
+  </head>
+  <body>
+    <canvas id="aurora" aria-hidden="true"></canvas>
+
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true">
+          <polygon points="50,10 90,82 10,82" />
+        </svg>
+        <span class="brand-name">PRISM</span>
+      </div>
+      <div class="accel" id="accel" title="Compute backend">
+        <span class="accel-dot"></span>
+        <span class="accel-label">detecting…</span>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="hero">
+        <h1 class="hero-title">Refract reality.</h1>
+        <p class="hero-sub">
+          Cutting-edge open-source AI, running <em>entirely on your device</em>.
+          No servers. No uploads. Your camera never leaves your hand.
+        </p>
+      </section>
+
+      <nav class="lenses" role="tablist" aria-label="Choose a lens">
+        <button class="lens" role="tab" data-lens="depth" aria-selected="true">
+          <span class="lens-icon">◈</span>
+          <span class="lens-text"><strong>Depth</strong><small>Photo → 3D</small></span>
+        </button>
+        <button class="lens" role="tab" data-lens="cutout" aria-selected="false">
+          <span class="lens-icon">✂</span>
+          <span class="lens-text"><strong>Cutout</strong><small>Erase background</small></span>
+        </button>
+        <button class="lens" role="tab" data-lens="describe" aria-selected="false">
+          <span class="lens-icon">✦</span>
+          <span class="lens-text"><strong>Describe</strong><small>AI vision</small></span>
+        </button>
+      </nav>
+
+      <section class="workspace" id="workspace">
+        <!-- Source picker (shared) -->
+        <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Add an image">
+          <input type="file" id="file" accept="image/*" hidden />
+          <input type="file" id="camera" accept="image/*" capture="environment" hidden />
+          <div class="dz-inner">
+            <div class="dz-glyph">⤓</div>
+            <p class="dz-title">Drop a photo, or tap to choose</p>
+            <div class="dz-actions">
+              <button class="btn ghost" id="pickFile" type="button">Upload</button>
+              <button class="btn ghost" id="pickCamera" type="button">Camera</button>
+              <button class="btn ghost" id="pickSample" type="button">Try a sample</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Output surface -->
+        <div class="surface" id="surface" hidden>
+          <div class="canvas-wrap" id="canvasWrap"></div>
+          <div class="caption" id="caption" hidden></div>
+          <div class="surface-bar">
+            <button class="btn" id="run" type="button">Run</button>
+            <button class="btn ghost" id="reset" type="button">New image</button>
+            <button class="btn ghost" id="download" type="button" hidden>Download</button>
+            <span class="hint" id="hint"></span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <span>Built with
+        <a href="https://github.com/huggingface/transformers.js" target="_blank" rel="noopener">Transformers.js</a>,
+        <a href="https://threejs.org" target="_blank" rel="noopener">Three.js</a> &amp; WebGPU.
+      </span>
+      <span class="foot-models" id="footModels"></span>
+    </footer>
+
+    <!-- Model loading overlay -->
+    <div class="loader" id="loader" hidden>
+      <div class="loader-card">
+        <div class="loader-prism" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <p class="loader-title" id="loaderTitle">Summoning the model…</p>
+        <p class="loader-note" id="loaderNote">First run downloads the AI to your device. It is cached afterward.</p>
+        <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+        <p class="loader-pct" id="loaderPct">0%</p>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" hidden></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
