@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite';
 
-// GitHub Pages serves this project site from https://<user>.github.io/create/
-// so production assets must be referenced under the "/create/" base path.
-// Override with BASE_PATH if the repo is ever renamed or served elsewhere.
+// Use relative asset paths ("./assets/…") in production. The repo is named
+// "Create" (capital C), so the Pages URL is case-sensitive (…/Create/); a
+// relative base makes assets resolve correctly regardless of the URL's case
+// or path depth. Override with BASE_PATH only if you need an absolute base.
 export default defineConfig(({ command }) => ({
-  base: command === 'build' ? process.env.BASE_PATH ?? '/create/' : '/',
+  base: command === 'build' ? process.env.BASE_PATH ?? './' : '/',
   build: {
     target: 'esnext',
     chunkSizeWarningLimit: 4096,
