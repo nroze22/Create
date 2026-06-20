@@ -14,9 +14,35 @@ const makePipeline = pipeline as unknown as (
 // Models are streamed from the Hugging Face Hub and cached by the browser.
 env.allowLocalModels = false;
 
+// GitHub Pages does not send the COOP/COEP headers required for
+// SharedArrayBuffer, so multi-threaded WASM (and its proxy worker) can stall on
+// load. Force single-threaded, no-proxy execution for reliability on static hosts.
+try {
+  const wasm = (env.backends as any)?.onnx?.wasm;
+  if (wasm) {
+    wasm.numThreads = 1;
+    wasm.proxy = false;
+    // Pin the ONNX Runtime WASM binaries to a CDN that hosts every variant for
+    // this exact runtime version. Under a project subpath like /Create/, the
+    // default relative resolution can 404 and hang the loader at 0%.
+    wasm.wasmPaths =
+      'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0-dev.20250409-89f8206ba4/dist/';
+  }
+} catch {
+  /* older/newer runtimes may shape this differently; ignore */
+}
+
 export type Backend = 'webgpu' | 'wasm';
 
 let backend: Backend | null = null;
+
+/** Force a specific backend and drop cached pipelines so they reload on it. */
+export function forceBackend(b: Backend) {
+  backend = b;
+  depthModel = null;
+  captionModel = null;
+  cutoutModel = null;
+}
 
 /** Detect the fastest available compute backend once, then memoize it. */
 export async function detectBackend(): Promise<Backend> {

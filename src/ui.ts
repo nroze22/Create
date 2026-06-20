@@ -18,6 +18,8 @@ export function showLoader(title: string, opts: { note?: string; determinate?: b
   loaderPct.textContent = '0%';
   bar.hidden = !determinate;
   loaderPct.hidden = !determinate;
+  const actions = document.getElementById('loaderActions');
+  if (actions) actions.hidden = true;
   loader.hidden = false;
 }
 
@@ -34,6 +36,38 @@ export function setLoaderTitle(title: string) {
 
 export function hideLoader() {
   loader.hidden = true;
+  bar.hidden = false;
+  loaderPct.hidden = false;
+}
+
+/** Turn the loading overlay into a visible, dismissable error card. */
+export function showError(title: string, detail: string) {
+  loader.hidden = false;
+  loaderTitle.textContent = title;
+  loaderNote.textContent = detail;
+  bar.hidden = true;
+  loaderPct.hidden = true;
+
+  let actions = document.getElementById('loaderActions');
+  if (!actions) {
+    actions = document.createElement('div');
+    actions.id = 'loaderActions';
+    actions.style.marginTop = '18px';
+    const reload = document.createElement('button');
+    reload.className = 'btn';
+    reload.textContent = 'Reload';
+    reload.addEventListener('click', () => location.reload());
+    const dismiss = document.createElement('button');
+    dismiss.className = 'btn ghost';
+    dismiss.style.marginLeft = '10px';
+    dismiss.textContent = 'Dismiss';
+    dismiss.addEventListener('click', () => {
+      loader.hidden = true;
+    });
+    actions.append(reload, dismiss);
+    barFill.closest('.loader-card')?.appendChild(actions);
+  }
+  actions.hidden = false;
 }
 
 let toastTimer: number | undefined;

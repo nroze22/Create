@@ -1,9 +1,9 @@
 import './style.css';
 import { startAurora } from './aurora';
-import { detectBackend, type Backend } from './ai';
+import { detectBackend, forceBackend, type Backend } from './ai';
 import { Source } from './source';
 import { createSample } from './sample';
-import { showLoader, updateLoader, hideLoader, setLoaderTitle, toast } from './ui';
+import { showLoader, updateLoader, hideLoader, setLoaderTitle, showError, toast } from './ui';
 import type { Lens, LensContext, LensResult } from './types';
 import { depthLens } from './depth';
 import { cutoutLens } from './cutout';
@@ -148,21 +148,11 @@ async function runLens() {
   clearSurface();
 
   const lens = lenses[activeLens];
-  const isCached = loaded.has(activeLens);
-  showLoader(isCached ? `Running on ${backendLabel[backend]}…` : lens.loadTitle, {
-    determinate: !isCached,
-    note: isCached
-      ? 'Crunching pixels on your device — no servers involved.'
-      : undefined,
-  });
 
   const ctx: LensContext = {
     source,
     container: canvasWrap,
-    onProgress: (p) => {
-      updateLoader(p);
-      if (p.ratio >= 1) setLoaderTitle(`Running on ${backendLabel[backend]}…`);
-    },
+    onProgress: () => {},
     setHint: (t) => (hintEl.textContent = t),
     setCaption: (t) => {
       if (t === null) {
@@ -179,17 +169,95 @@ async function runLens() {
   };
 
   try {
-    result = await lens.run(ctx);
+    result = await runAttempt(lens, ctx);
     loaded.add(activeLens);
   } catch (err) {
     console.error(err);
-    toast('Something went wrong running the model. Try another image.');
+    // If the GPU path stalled or failed, retry once on CPU before giving up.
+    if (backend === 'webgpu') {
+      try {
+        forceBackend('wasm');
+        backend = 'wasm';
+        $('accel').className = 'accel cpu';
+        (document.querySelector('.accel-label') as HTMLElement).textContent = backendLabel.wasm;
+        toast('GPU path failed — retrying on CPU…');
+        result = await runAttempt(lens, ctx, true);
+        loaded.add(activeLens);
+        return;
+      } catch (err2) {
+        console.error(err2);
+        showError('Could not load the model', describeError(err2));
+        clearSurface();
+        return;
+      }
+    }
+    showError('Could not load the model', describeError(err));
     clearSurface();
   } finally {
-    hideLoader();
+    // On success runAttempt hid the loader; on error we leave the error card up.
     running = false;
     runBtn.disabled = false;
   }
+}
+
+function describeError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/stall/i.test(msg))
+    return 'The model did not start downloading. Check your connection, then Reload. On some browsers, disabling strict privacy/shield settings for this site helps.';
+  if (/fetch|network|load model|Failed to/i.test(msg))
+    return `Network error while fetching the model from Hugging Face. ${msg}`;
+  return msg;
+}
+
+/**
+ * Run a lens with a stall watchdog. The watchdog only guards the cold-start
+ * download: if no progress arrives within the timeout it rejects, so the caller
+ * can fall back to another backend instead of hanging forever.
+ */
+async function runAttempt(lens: Lens, ctx: LensContext, cpuRetry = false): Promise<LensResult> {
+  const isCached = loaded.has(activeLens) || cpuRetry;
+  showLoader(isCached ? `Running on ${backendLabel[backend]}…` : lens.loadTitle, {
+    determinate: !isCached,
+    note: isCached ? 'Crunching pixels on your device — no servers involved.' : undefined,
+  });
+
+  let started = isCached;
+  ctx.onProgress = (p) => {
+    if (p.ratio > 0) started = true;
+    updateLoader(p);
+    if (p.ratio >= 1) setLoaderTitle(`Running on ${backendLabel[backend]}…`);
+  };
+
+  const STALL_MS = 40000;
+  let lastTick = Date.now();
+  const origProgress = ctx.onProgress;
+  ctx.onProgress = (p) => {
+    lastTick = Date.now();
+    origProgress(p);
+  };
+
+  const run = lens.run(ctx);
+  if (isCached) {
+    const res = await run;
+    hideLoader();
+    return res;
+  }
+
+  const watchdog = new Promise<never>((_, reject) => {
+    const tick = () => {
+      if (started) return; // download began; let it finish at its own pace
+      if (Date.now() - lastTick > STALL_MS) {
+        reject(new Error('Model load stalled (no data received)'));
+        return;
+      }
+      setTimeout(tick, 2500);
+    };
+    setTimeout(tick, 2500);
+  });
+
+  const res = await Promise.race([run, watchdog]);
+  hideLoader();
+  return res;
 }
 
 function reset() {
