@@ -34,6 +34,10 @@ export function setLoaderTitle(title: string) {
   loaderTitle.textContent = title;
 }
 
+export function setLoaderNote(note: string) {
+  loaderNote.textContent = note;
+}
+
 export function hideLoader() {
   loader.hidden = true;
   bar.hidden = false;
@@ -45,6 +49,7 @@ export function showError(title: string, detail: string) {
   loader.hidden = false;
   loaderTitle.textContent = title;
   loaderNote.textContent = detail;
+  loaderNote.style.whiteSpace = 'pre-line';
   bar.hidden = true;
   loaderPct.hidden = true;
 

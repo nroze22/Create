@@ -1,6 +1,7 @@
 // PRISM — on-device AI engine.
 // All inference runs in the browser via Transformers.js (WebGPU, WASM fallback).
 import { pipeline, AutoModel, AutoProcessor, RawImage, env } from '@huggingface/transformers';
+import { status } from './status';
 
 // The pipeline overloads in Transformers.js generate a union too large for TS to
 // represent at the call site, so we wrap them with a narrow local signature.
@@ -47,15 +48,20 @@ export function forceBackend(b: Backend) {
 /** Detect the fastest available compute backend once, then memoize it. */
 export async function detectBackend(): Promise<Backend> {
   if (backend) return backend;
+  status('Detecting compute backend…');
   const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
   if (gpu) {
     try {
       const adapter = await gpu.requestAdapter();
-      if (adapter) return (backend = 'webgpu');
+      if (adapter) {
+        status('Backend: WebGPU');
+        return (backend = 'webgpu');
+      }
     } catch {
       /* fall through to wasm */
     }
   }
+  status('Backend: CPU (WASM)');
   return (backend = 'wasm');
 }
 
@@ -107,10 +113,12 @@ let cutoutModel: Promise<{ model: any; processor: any }> | null = null;
 export async function getDepth(onProgress: (p: LoadProgress) => void) {
   const device = await detectBackend();
   if (!depthModel) {
+    status(`Fetching Depth Anything V2 from Hugging Face (${device})…`);
     depthModel = makePipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', {
       device,
       progress_callback: makeProgressAggregator(onProgress),
     });
+    depthModel.then(() => status('Depth model ready'), (e) => status('Depth model FAILED: ' + (e?.message ?? e)));
   }
   return depthModel;
 }

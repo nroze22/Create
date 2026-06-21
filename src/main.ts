@@ -3,11 +3,14 @@ import { startAurora } from './aurora';
 import { detectBackend, forceBackend, type Backend } from './ai';
 import { Source } from './source';
 import { createSample } from './sample';
-import { showLoader, updateLoader, hideLoader, setLoaderTitle, showError, toast } from './ui';
+import { showLoader, updateLoader, hideLoader, setLoaderTitle, setLoaderNote, showError, toast } from './ui';
+import { onStatus } from './status';
 import type { Lens, LensContext, LensResult } from './types';
 import { depthLens } from './depth';
 import { cutoutLens } from './cutout';
 import { describeLens } from './describe';
+
+declare const __BUILD__: string;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -49,7 +52,21 @@ detectBackend().then((b) => {
   (accel.querySelector('.accel-label') as HTMLElement).textContent = backendLabel[b];
 });
 
-$('footModels').textContent = 'Depth Anything V2 · RMBG-1.4 · ViT-GPT2';
+$('footModels').textContent = `Depth Anything V2 · RMBG-1.4 · ViT-GPT2 · build ${__BUILD__}`;
+
+// Live engine status → loader note, so a hang is never opaque.
+onStatus((msg) => setLoaderNote(msg));
+
+// Capture anything that escapes our try/catch so it shows on screen, not just console.
+window.addEventListener('unhandledrejection', (e) => {
+  if (!running) return;
+  const reason = (e.reason && (e.reason.message || e.reason)) ?? 'unknown';
+  showError('Model error', `${reason}\n\n(build ${__BUILD__})`);
+});
+window.addEventListener('error', (e) => {
+  if (!running) return;
+  showError('Script error', `${e.message}\n\n(build ${__BUILD__})`);
+});
 
 // ---- Lens tabs ----
 document.querySelectorAll<HTMLButtonElement>('.lens').forEach((btn) => {
@@ -228,7 +245,11 @@ async function runAttempt(lens: Lens, ctx: LensContext, cpuRetry = false): Promi
     if (p.ratio >= 1) setLoaderTitle(`Running on ${backendLabel[backend]}…`);
   };
 
-  const STALL_MS = 40000;
+  const NO_PROGRESS_MS = 22000; // cold start should begin downloading within this
+  // WebGPU can hang during session creation AFTER download; cap the whole GPU
+  // attempt so we can fall back to CPU. CPU inference may be slow, so no cap there.
+  const ABSOLUTE_MS = backend === 'webgpu' ? 60000 : 0;
+  const startTime = Date.now();
   let lastTick = Date.now();
   const origProgress = ctx.onProgress;
   ctx.onProgress = (p) => {
@@ -237,7 +258,7 @@ async function runAttempt(lens: Lens, ctx: LensContext, cpuRetry = false): Promi
   };
 
   const run = lens.run(ctx);
-  if (isCached) {
+  if (isCached && !ABSOLUTE_MS) {
     const res = await run;
     hideLoader();
     return res;
@@ -245,14 +266,17 @@ async function runAttempt(lens: Lens, ctx: LensContext, cpuRetry = false): Promi
 
   const watchdog = new Promise<never>((_, reject) => {
     const tick = () => {
-      if (started) return; // download began; let it finish at its own pace
-      if (Date.now() - lastTick > STALL_MS) {
+      if (ABSOLUTE_MS && Date.now() - startTime > ABSOLUTE_MS) {
+        reject(new Error('GPU attempt timed out'));
+        return;
+      }
+      if (!started && Date.now() - lastTick > NO_PROGRESS_MS) {
         reject(new Error('Model load stalled (no data received)'));
         return;
       }
-      setTimeout(tick, 2500);
+      setTimeout(tick, 2000);
     };
-    setTimeout(tick, 2500);
+    setTimeout(tick, 2000);
   });
 
   const res = await Promise.race([run, watchdog]);

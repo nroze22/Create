@@ -6,6 +6,11 @@ import { defineConfig } from 'vite';
 // or path depth. Override with BASE_PATH only if you need an absolute base.
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? process.env.BASE_PATH ?? './' : '/',
+  define: {
+    __BUILD__: JSON.stringify(
+      new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC',
+    ),
+  },
   build: {
     target: 'esnext',
     chunkSizeWarningLimit: 4096,
